@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 def send_message(bot, message):
-    """Отправка сообщения об изменившемся статусе через бота-ассистента"""
+    """Отправка сообщения об изменившемся статусе через бота-ассистента."""
     try:
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
         logging.info('Сообщение отправлено успешно.')
@@ -45,7 +45,7 @@ def send_message(bot, message):
 
 
 def get_api_answer(current_timestamp):
-    """Получение данных через API Практикум.Домашки"""
+    """Получение данных через API Практикум.Домашки."""
     timestamp = current_timestamp or int(time.time())
     params = {'from_date': timestamp}
     try:
@@ -69,7 +69,7 @@ def get_api_answer(current_timestamp):
 
 
 def check_response(response):
-    """Проверка типа возвращенных API данных"""
+    """Проверка типа возвращенных API данных."""
     if type(response) is not dict:
         logging.error('Формат ответа API неверен')
         raise TypeError('Формат ответа API неверен')
@@ -84,7 +84,7 @@ def check_response(response):
 
 
 def parse_status(homework):
-    """Проверка имени и статуса домашней работы"""
+    """Проверка имени и статуса домашней работы."""
     homework_name = homework.get('homework_name')
     if homework_name is None:
         logging.error('Ответ API не содержит homework_name)')
@@ -101,7 +101,7 @@ def parse_status(homework):
 
 
 def check_tokens():
-    """"Проверка всех трёх токенов на наличие в переменных окружения"""
+    """Проверка всех трёх токенов на наличие в переменных окружения."""
     return all([PRACTICUM_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID])
 
 
