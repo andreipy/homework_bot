@@ -31,20 +31,17 @@ HOMEWORK_VERDICTS = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-assistant_logger = logging.getLogger(__name__)
-assistant_logger.setLevel(logging.INFO)
-logger_handler = logging.StreamHandler()
-assistant_logger.addHandler(logger_handler)
+logger = logging.getLogger(__name__)
 
 
 def send_message(bot, message):
     """Отправка сообщения об изменившемся статусе через бота-ассистента."""
     try:
         bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-        assistant_logger.info(
+        logger.info(
             'Сообщение отправлено успешно.')
     except error.TelegramError as error:
-        assistant_logger.error(
+        logger.error(
             f'Не удалось отправить сообщение. Ошибка: {error}')
         TelegramException({error})
 
@@ -60,68 +57,61 @@ def get_api_answer(current_timestamp):
             params=params
         )
     except Exception as error:
-        assistant_logger.error(f'Сбой в работе программы: Ошибка: {error}')
+        logger.error(f'Сбой в работе программы: Ошибка: {error}')
         raise ConnectionError(f'Сбой в работе программы: Ошибка: {error}')
-    try:
-        homework_statuses = response.json()
-    except json.decoder.JSONDecodeError:
-        JSONDecodeException()
     if response.status_code != HTTPStatus.OK:
-        assistant_logger.error(
+        logger.error(
             f'Бот не может получить доступ к API, код ошибки:'
             f' {response.status_code}'
         )
         raise ConnectionError(f'Бот не может получить доступ к API, '
                               f'код ошибки: {response.status_code}'
                               )
+    try:
+        homework_statuses = response.json()
+    except json.decoder.JSONDecodeError:
+        JSONDecodeException()
     return homework_statuses
 
 
 def check_response(response):
     """Проверка типа возвращенных API данных."""
     if not isinstance(response, dict):
-        assistant_logger.error('Формат ответа API неверен')
+        logger.error('Формат ответа API неверен')
         raise TypeError('Формат ответа API неверен')
-    try:
-        homeworks = response.get('homeworks')[0]
-        if not homeworks:
-            assistant_logger.debug('Статус домашних заданий не обновлялся')
-            return []
-        else:
-            if homeworks is None:
-                assistant_logger.error('Ответ API не содержит '
-                                       'ключ \'homeworks\'')
-                raise KeyError('Ответ API не содержит ключ \'homeworks\'')
-            if not isinstance(homeworks, dict):
-                assistant_logger.error('Тип домашки неверен')
-                raise TypeError('Тип домашки неверен')
-            return homeworks
-    except IndexError:
-        return []
+    homeworks = response.get('homeworks')
+    if homeworks is None:
+        logger.error('Ответ API не содержит '
+                     'ключ \'homeworks\'')
+        raise KeyError('Ответ API не содержит ключ \'homeworks\'')
+    if not isinstance(homeworks, list):
+        logger.error('Тип домашки неверен')
+        raise TypeError('Тип домашки неверен')
+    return homeworks[0]
 
 
 def parse_status(homework):
     """Проверка имени и статуса домашней работы."""
-    if not isinstance(homework, dict):
-        assistant_logger.error('Формат ответа API неверен')
-        raise KeyError('Формат ответа API неверен')
-    homework_name = homework.get('homework_name')
-    if homework_name is None:
-        assistant_logger.error('Ответ API не содержит homework_name)')
+    if 'homework_name' not in homework:
+        logger.error('Ответ API не содержит homework_name')
         raise KeyError('Ответ API не содержит homework_name')
+    if not isinstance(homework, dict):
+        logger.error('Формат ответа API неверен')
+        raise TypeError('Формат ответа API неверен')
+    homework_name = homework.get('homework_name')
     homework_status = homework.get('status')
     if homework_status is None:
-        assistant_logger.error('Ответ API не содержит homework_status')
+        logger.error('Ответ API не содержит homework_status')
         raise KeyError('Ответ API не содержит homework_status')
     try:
         verdict = HOMEWORK_VERDICTS[homework_status]
     except Exception as status:
-        assistant_logger.error(f'Невозможно соотнести полученный статус '
-                               f'ни с одним из ожидаемых: получен {status}'
-                               )
+        logger.error(f'Невозможно соотнести полученный статус '
+                     f'ни с одним из ожидаемых: получен {status}'
+                     )
         VerdictException()
     if verdict is None:
-        assistant_logger.error('Ответ API не содержит verdict')
+        logger.error('Ответ API не содержит verdict')
         raise KeyError('Ответ API не содержит verdict')
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
@@ -134,24 +124,28 @@ def check_tokens():
 def main():
     """Основная логика работы бота."""
     bot = telegram.Bot(token=TELEGRAM_TOKEN)
-    current_timestamp = int(time.time()) - RETRY_TIME
+    current_timestamp = int(time.time())
     if not check_tokens():
-        assistant_logger.critical(
+        logger.critical(
             'Нет одного или нескольких токенов для работы бота')
         TokenException()
     while True:
         try:
             response = get_api_answer(current_timestamp)
-            homework = check_response(response)
-            if not homework:
-                assistant_logger.debug('Статус домашек не обновлялся')
+            try:
+                homework = check_response(response)
+                if not homework:
+                    logger.debug('Статус домашек не обновлялся')
+                    homework = 'Статус домашек не обновлялся'
+                    send_message(bot, message=homework)
+            except Exception:
+                logger.debug('Статус домашек не обновлялся')
                 homework = 'Статус домашек не обновлялся'
                 send_message(bot, message=homework)
-            else:
-                send_message(bot, parse_status(homework))
+            send_message(bot, parse_status(homework))
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
-            assistant_logger.error(f'Сбой в работе программы: {error}')
+            logger.error(f'Сбой в работе программы: {error}')
             return message
         finally:
             current_timestamp = int(time.time())
@@ -159,4 +153,7 @@ def main():
 
 
 if __name__ == '__main__':
+    logger.setLevel(logging.INFO)
+    logger_handler = logging.StreamHandler()
+    logger.addHandler(logger_handler)
     main()
