@@ -43,7 +43,7 @@ def send_message(bot, message):
     except error.TelegramError as error:
         logger.error(
             f'Не удалось отправить сообщение. Ошибка: {error}')
-        TelegramException({error})
+        raise TelegramException(error)
 
 
 def get_api_answer(current_timestamp):
@@ -70,7 +70,8 @@ def get_api_answer(current_timestamp):
     try:
         homework_statuses = response.json()
     except json.decoder.JSONDecodeError:
-        JSONDecodeException()
+        raise JSONDecodeException('При декодировании ответа API в формат'
+                                  + ' JSON произошла ошибка')
     return homework_statuses
 
 
@@ -87,7 +88,7 @@ def check_response(response):
     if not isinstance(homeworks, list):
         logger.error('Тип домашки неверен')
         raise TypeError('Тип домашки неверен')
-    return homeworks[0]
+    return homeworks
 
 
 def parse_status(homework):
@@ -109,7 +110,9 @@ def parse_status(homework):
         logger.error(f'Невозможно соотнести полученный статус '
                      f'ни с одним из ожидаемых: получен {status}'
                      )
-        VerdictException()
+        raise VerdictException(f'Невозможно соотнести полученный статус '
+                               f'ни с одним из ожидаемых: получен {status}'
+                               )
     if verdict is None:
         logger.error('Ответ API не содержит verdict')
         raise KeyError('Ответ API не содержит verdict')
@@ -127,22 +130,19 @@ def main():
     current_timestamp = int(time.time())
     if not check_tokens():
         logger.critical(
-            'Нет одного или нескольких токенов для работы бота')
-        TokenException()
+            'Нет одного или нескольких токенов')
+        raise TokenException('Нет одного или нескольких токенов')
     while True:
         try:
             response = get_api_answer(current_timestamp)
-            try:
-                homework = check_response(response)
-                if not homework:
-                    logger.debug('Статус домашек не обновлялся')
-                    homework = 'Статус домашек не обновлялся'
-                    send_message(bot, message=homework)
-            except Exception:
+            homeworks = check_response(response)
+            if len(homeworks) == 0:
                 logger.debug('Статус домашек не обновлялся')
                 homework = 'Статус домашек не обновлялся'
                 send_message(bot, message=homework)
-            send_message(bot, parse_status(homework))
+            else:
+                homework = homeworks[0]
+                send_message(bot, parse_status(homework))
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             logger.error(f'Сбой в работе программы: {error}')
